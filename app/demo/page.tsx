@@ -1,9 +1,9 @@
-import MotionButton from "@/components/ui/motion-button";
+import { MarketingBadges } from "@/components/ui/marketing-badges"
 
-export default function Demo() {
+export default function Page() {
   return (
-    <div className="flex items-center justify-center min-h-screen bg-background text-foreground">
-      <MotionButton label="Get Started" />
-    </div>
-  );
+    <main className="flex min-h-screen flex-col items-center justify-center w-full">
+      <MarketingBadges />
+    </main>
+  )
 }

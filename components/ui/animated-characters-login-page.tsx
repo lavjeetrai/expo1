@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils";
 import { auth, googleProvider } from "@/lib/firebase";
 import { signInWithPopup } from "firebase/auth";
 import { useRouter } from "next/navigation";
+import { PrismFluxLoader } from "@/components/ui/prism-flux-loader";
 
 
 interface PupilProps {
@@ -178,6 +179,7 @@ function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [showLoader, setShowLoader] = useState(false);
   const [mouseX, setMouseX] = useState<number>(0);
   const [mouseY, setMouseY] = useState<number>(0);
   const [isPurpleBlinking, setIsPurpleBlinking] = useState(false);
@@ -272,7 +274,7 @@ function LoginPage() {
   }, [password, showPassword, isPurplePeeking]);
 
   const calculatePosition = (ref: React.RefObject<HTMLDivElement | null>) => {
-    if (!ref.current) return { faceX: 0, faceY: 0, bodyRotation: 0 };
+    if (!ref.current) return { faceX: 0, faceY: 0, bodySkew: 0 };
 
     const rect = ref.current.getBoundingClientRect();
     const centerX = rect.left + rect.width / 2;
@@ -298,8 +300,10 @@ function LoginPage() {
     try {
       const result = await signInWithPopup(auth, googleProvider);
       console.log("Logged in user:", result.user);
-      alert(`Welcome back, ${result.user.displayName}!`);
-      router.push("/");
+      setShowLoader(true);
+      setTimeout(() => {
+        router.push("/");
+      }, 2500);
     } catch (error: any) {
       console.error("Login failed:", error);
       alert("Login failed: " + error.message);
@@ -311,17 +315,39 @@ function LoginPage() {
     setError("");
     setIsLoading(true);
 
-    await new Promise(resolve => setTimeout(resolve, 300));
+    try {
+      const res = await fetch('/api/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password })
+      });
 
-    if (email === "erik@gmail.com" && password === "1234") {
-      console.log("✅ Login successful!");
-      alert("Login successful! Welcome, Erik!");
-    } else {
-      setError("Invalid email or password. Please try again.");
-      console.log("❌ Login failed");
+      const data = await res.json();
+      
+      if (!res.ok) {
+        setError(data.error || "Login failed");
+        setIsLoading(false);
+        return;
+      }
+
+      console.log("✅ Login successful!", data.user);
+      if (typeof window !== "undefined") {
+        localStorage.setItem("userRole", data.user.role);
+        localStorage.setItem("userEmail", email);
+      }
+      setShowLoader(true);
+      
+      setTimeout(() => {
+        if (data.user.role === "professor") {
+          router.push("/dashboard");
+        } else {
+          router.push("/classroom");
+        }
+      }, 2500);
+    } catch (err: any) {
+      setError("An unexpected error occurred while connecting to MongoDB");
+      setIsLoading(false);
     }
-
-    setIsLoading(false);
   };
 
   return (
@@ -514,10 +540,16 @@ function LoginPage() {
         <div className="w-full max-w-[420px]">
           {/* Mobile Logo Removed */}
 
-          <div className="text-center mb-10">
-            <h1 className="text-3xl font-bold tracking-tight mb-2">Welcome back!</h1>
-            <p className="text-muted-foreground text-sm">Please enter your details</p>
-          </div>
+          {showLoader ? (
+            <div className="flex flex-col items-center justify-center h-full min-h-[400px]">
+              <PrismFluxLoader />
+            </div>
+          ) : (
+            <>
+              <div className="text-center mb-10">
+                <h1 className="text-3xl font-bold tracking-tight mb-2">Welcome back!</h1>
+                <p className="text-muted-foreground text-sm">Please enter your details</p>
+              </div>
 
           <form onSubmit={handleSubmit} className="space-y-5">
             <div className="space-y-2">
@@ -615,6 +647,8 @@ function LoginPage() {
               Sign Up
             </a>
           </div>
+            </>
+          )}
         </div>
       </div>
     </div>

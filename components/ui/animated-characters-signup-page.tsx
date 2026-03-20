@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils";
 import { auth, googleProvider } from "@/lib/firebase";
 import { signInWithPopup } from "firebase/auth";
 import { useRouter } from "next/navigation";
+import { PrismFluxLoader } from "@/components/ui/prism-flux-loader";
 
 
 interface PupilProps {
@@ -176,9 +177,14 @@ function SignupPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [name, setName] = useState("");
+  const [registrationNumber, setRegistrationNumber] = useState("");
+  const [section, setSection] = useState("");
+  const [course, setCourse] = useState("");
   const [role, setRole] = useState("student");
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [showLoader, setShowLoader] = useState(false);
   const [mouseX, setMouseX] = useState<number>(0);
   const [mouseY, setMouseY] = useState<number>(0);
   const [isPurpleBlinking, setIsPurpleBlinking] = useState(false);
@@ -273,7 +279,7 @@ function SignupPage() {
   }, [password, showPassword, isPurplePeeking]);
 
   const calculatePosition = (ref: React.RefObject<HTMLDivElement | null>) => {
-    if (!ref.current) return { faceX: 0, faceY: 0, bodyRotation: 0 };
+    if (!ref.current) return { faceX: 0, faceY: 0, bodySkew: 0 };
 
     const rect = ref.current.getBoundingClientRect();
     const centerX = rect.left + rect.width / 2;
@@ -298,29 +304,93 @@ function SignupPage() {
   const handleGoogleSignIn = async () => {
     try {
       const result = await signInWithPopup(auth, googleProvider);
+      
+      // Sync Google User with MongoDB to preserve defined Role
+      const res = await fetch('/api/signup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: result.user.email,
+          name: result.user.displayName,
+          firebaseUid: result.user.uid,
+          role: role
+        })
+      });
+      
+      const dbResult = await res.json();
+      if (!res.ok && dbResult.error !== 'A user with this email already exists') {
+         console.warn("MongoDB sync issue:", dbResult.error);
+      }
+
       console.log("Logged in user:", result.user, "Selected Role:", role);
-      alert(`Welcome, ${result.user.displayName}! (Role: ${role} ready to be synced with DB)`);
-      router.push("/");
-    } catch (error: any) {
+      if (typeof window !== "undefined") {
+        localStorage.setItem("userRole", role);
+      }
+      setShowLoader(true);
+      
+      setTimeout(() => {
+        if (role === "professor") {
+          router.push("/dashboard");
+        } else {
+          router.push("/classroom");
+        }
+      }, 2500);
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : 'Unknown error';
       console.error("Login failed:", error);
-      alert("Login failed: " + error.message);
+      alert("Login failed: " + msg);
     }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+
+    if (role === 'student') {
+      if (!/^ap/i.test(registrationNumber)) {
+        setError("Registration number must start with 'AP' or 'ap' (ex: AP25XXXXXXXXX).");
+        return;
+      }
+    }
+
     setIsLoading(true);
 
-    await new Promise(resolve => setTimeout(resolve, 300));
-    console.log(`Ready to save to DB -> Email: ${email}, Role: ${role}`);
+    try {
+      const payload = role === 'student'
+        ? { email, password, role, name, registrationNumber, course, section }
+        : { email, password, role };
 
-    if (email === "erik@gmail.com" && password === "1234") {
-      console.log("✅ Login successful!");
-      alert(`Login successful! Welcome, Erik! Your role is ${role}.`);
-    } else {
-      setError("Invalid email or password. Please try again.");
-      console.log("❌ Login failed");
+      const res = await fetch('/api/signup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      const data = await res.json();
+      
+      if (!res.ok) {
+        setError(data.error || "Signup failed");
+        return;
+      }
+
+      console.log("✅ Signup successful!");
+      if (typeof window !== "undefined") {
+        localStorage.setItem("userRole", role);
+        localStorage.setItem("userEmail", email);
+      }
+      setShowLoader(true);
+      
+      setTimeout(() => {
+        if (role === "professor") {
+          router.push("/dashboard");
+        } else {
+          router.push("/classroom");
+        }
+      }, 2500);
+    } catch (err: any) {
+      setError("An unexpected error occurred while connecting to MongoDB");
+    } finally {
+      setIsLoading(false);
     }
 
     setIsLoading(false);
@@ -516,10 +586,16 @@ function SignupPage() {
         <div className="w-full max-w-[420px]">
           {/* Mobile Logo Removed */}
 
-          <div className="text-center mb-10">
-            <h1 className="text-3xl font-bold tracking-tight mb-2">Create an account</h1>
-            <p className="text-muted-foreground text-sm">Sign up to get started</p>
-          </div>
+          {showLoader ? (
+            <div className="flex flex-col items-center justify-center h-full min-h-[400px]">
+              <PrismFluxLoader />
+            </div>
+          ) : (
+            <>
+              <div className="text-center mb-10">
+                <h1 className="text-3xl font-bold tracking-tight mb-2">Create an account</h1>
+                <p className="text-muted-foreground text-sm">Sign up to get started</p>
+              </div>
 
           <form onSubmit={handleSubmit} className="space-y-5">
             <div className="space-y-2">
@@ -567,6 +643,75 @@ function SignupPage() {
                 className="h-12 bg-background border-border/60 focus:border-primary"
               />
             </div>
+
+            {role === 'student' && (
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="name" className="text-sm font-medium">Name</Label>
+                  <Input
+                    id="name"
+                    type="text"
+                    placeholder="Anna Smith"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    onFocus={() => setIsTyping(true)}
+                    onBlur={() => setIsTyping(false)}
+                    required
+                    className="h-12 bg-background border-border/60 focus:border-primary"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="registrationNumber" className="text-sm font-medium">Registration Number</Label>
+                  <Input
+                    id="registrationNumber"
+                    type="text"
+                    placeholder="AP25XXXXXXXXX"
+                    value={registrationNumber}
+                    onChange={(e) => setRegistrationNumber(e.target.value.toUpperCase())}
+                    onFocus={() => setIsTyping(true)}
+                    onBlur={() => setIsTyping(false)}
+                    required
+                    className="h-12 bg-background border-border/60 focus:border-primary"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="course" className="text-sm font-medium">Course</Label>
+                  <select
+                    id="course"
+                    value={course}
+                    onChange={(e) => setCourse(e.target.value)}
+                    onFocus={() => setIsTyping(true)}
+                    onBlur={() => setIsTyping(false)}
+                    required
+                    className="flex h-12 w-full rounded-md border border-border/60 bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-50 appearance-none"
+                  >
+                    <option value="" disabled>Select your course</option>
+                    <option value="CSE CORE">CSE CORE</option>
+                    <option value="CSE AIML">CSE AIML</option>
+                    <option value="CSE CYBERSECURITY">CSE CYBERSECURITY</option>
+                    <option value="ECE">ECE</option>
+                    <option value="CIVIL">CIVIL</option>
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="section" className="text-sm font-medium">Section</Label>
+                  <select
+                    id="section"
+                    value={section}
+                    onChange={(e) => setSection(e.target.value)}
+                    onFocus={() => setIsTyping(true)}
+                    onBlur={() => setIsTyping(false)}
+                    required
+                    className="flex h-12 w-full rounded-md border border-border/60 bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-50 appearance-none"
+                  >
+                    <option value="" disabled>Select your section</option>
+                    <option value="A">A</option>
+                    <option value="B">B</option>
+                    <option value="C">C</option>
+                  </select>
+                </div>
+              </>
+            )}
 
             <div className="space-y-2">
               <Label htmlFor="password" className="text-sm font-medium">Password</Label>
@@ -647,6 +792,8 @@ function SignupPage() {
               Log in
             </a>
           </div>
+            </>
+          )}
         </div>
       </div>
     </div>
