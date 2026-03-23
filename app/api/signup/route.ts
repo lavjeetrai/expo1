@@ -22,7 +22,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'A user with this email already exists' }, { status: 400 });
     }
 
-    const userData: Record<string, unknown> = { email, role, name, firebaseUid };
+    const userData: Record<string, unknown> = { email, password, role, name, firebaseUid };
 
     // Save student-specific fields when the role is student
     if (role === 'student') {

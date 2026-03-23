@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import ReactMarkdown from 'react-markdown';
 import { useParams, useRouter } from 'next/navigation';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -9,10 +10,8 @@ import {
 } from 'recharts';
 import {
   Loader2, ChevronLeft, Users, Brain, TrendingUp,
-  AlertTriangle, CheckCircle, BookOpen, MessageSquare,
-  ClipboardList, Sparkles, ChevronDown, ChevronUp, BarChart2
+  AlertTriangle, CheckCircle, BookOpen, Sparkles, BarChart2
 } from 'lucide-react';
-import { cn } from '@/lib/utils';
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 interface WeakConcept { concept: string; count: number }
@@ -47,82 +46,6 @@ function confidenceLabel(score: number) {
   return 'Strong';
 }
 
-// ─── Circular Gauge ─────────────────────────────────────────────────────────
-function ConfidenceGauge({ score, size = 80 }: { score: number; size?: number }) {
-  const r = (size - 10) / 2;
-  const circ = 2 * Math.PI * r;
-  const offset = circ - (score / 100) * circ;
-  const color = confidenceColor(score);
-
-  return (
-    <div className="relative flex items-center justify-center" style={{ width: size, height: size }}>
-      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="-rotate-90">
-        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth={8} />
-        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={color}
-          strokeWidth={8} strokeDasharray={circ} strokeDashoffset={offset}
-          strokeLinecap="round" style={{ transition: 'stroke-dashoffset 1s ease' }} />
-      </svg>
-      <span className="absolute text-white font-bold" style={{ fontSize: size * 0.22, color }}>{score}</span>
-    </div>
-  );
-}
-
-// ─── Student Card ───────────────────────────────────────────────────────────
-function StudentCard({ student }: { student: StudentSummary }) {
-  const [expanded, setExpanded] = useState(false);
-  const color = confidenceColor(student.avgConfidence);
-
-  return (
-    <div className="bg-[#16161a] border border-white/[0.06] rounded-2xl p-4 transition-all hover:border-white/[0.1]">
-      <div className="flex items-center gap-4">
-        <ConfidenceGauge score={student.avgConfidence} size={72} />
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center justify-between gap-2 mb-1">
-            <p className="text-white font-semibold truncate">{student.name}</p>
-            <span className="text-xs px-2 py-0.5 rounded-full border font-medium shrink-0"
-              style={{ color, borderColor: `${color}40`, backgroundColor: `${color}10` }}>
-              {confidenceLabel(student.avgConfidence)}
-            </span>
-          </div>
-          <p className="text-[#8a8a8f] text-xs truncate mb-2">{student.email}</p>
-          <div className="flex items-center gap-3 text-xs text-[#8a8a8f]">
-            <span className="flex items-center gap-1"><MessageSquare className="size-3" />{student.questionCount} questions</span>
-            <span className="flex items-center gap-1"><ClipboardList className="size-3" />{student.submissionCount} submitted</span>
-          </div>
-        </div>
-        <button onClick={() => setExpanded(!expanded)} className="p-1.5 rounded-lg text-[#8a8a8f] hover:text-white hover:bg-white/5 transition-all shrink-0">
-          {expanded ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
-        </button>
-      </div>
-
-      {expanded && (
-        <div className="mt-4 pt-4 border-t border-white/[0.06] space-y-3 animate-in fade-in slide-in-from-top-2 duration-200">
-          {student.topWeakConcepts.length > 0 && (
-            <div>
-              <p className="text-xs text-[#8a8a8f] font-semibold uppercase tracking-wider mb-2">Weak Areas</p>
-              <div className="flex flex-wrap gap-2">
-                {student.topWeakConcepts.map(({ concept, count }) => (
-                  <span key={concept} className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-red-500/10 border border-red-500/15 text-red-300 text-xs">
-                    <AlertTriangle className="size-3" />{concept} <span className="text-red-400/60">×{count}</span>
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
-          {student.recentFeedback && (
-            <div>
-              <p className="text-xs text-[#8a8a8f] font-semibold uppercase tracking-wider mb-2">AI Feedback</p>
-              <p className="text-[#a0a0a5] text-sm leading-relaxed bg-[#1a1a1f] rounded-xl p-3 border border-white/[0.04]">
-                {student.recentFeedback}
-              </p>
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
 // ─── Custom Tooltip ─────────────────────────────────────────────────────────
 function CustomTooltip({ active, payload, label }: { active?: boolean; payload?: Array<{ value: number }>; label?: string }) {
   if (!active || !payload || !payload.length) return null;
@@ -144,6 +67,8 @@ export default function AnalyticsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [classroomName, setClassroomName] = useState('Classroom');
+  const [aiSummary, setAiSummary] = useState<string | null>(null);
+  const [loadingSummary, setLoadingSummary] = useState(true);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -171,8 +96,25 @@ export default function AnalyticsPage() {
       } catch { /* ignore */ }
     };
 
+    const fetchSummary = async () => {
+      try {
+        const res = await fetch(`/api/analytics/classroom/summary?classroomId=${classroomId}`);
+        if (res.ok) {
+          const d = await res.json();
+          setAiSummary(d.summary);
+        } else {
+          setAiSummary("Failed to generate AI summary.");
+        }
+      } catch {
+        setAiSummary("Error loading AI summary.");
+      } finally {
+        setLoadingSummary(false);
+      }
+    };
+
     fetchData();
     fetchName();
+    fetchSummary();
   }, [classroomId]);
 
   if (loading) {
@@ -237,6 +179,60 @@ export default function AnalyticsPage() {
           </div>
         ) : (
           <>
+            {/* ── AI Topic Summary Report ── */}
+            <div className="mb-8 p-6 bg-indigo-500/10 border border-indigo-500/20 rounded-2xl relative overflow-hidden">
+              <div className="absolute top-0 right-0 p-8 opacity-20 pointer-events-none">
+                <Sparkles className="size-24 text-indigo-400" />
+              </div>
+              <div className="flex items-center gap-3 mb-3 relative z-10">
+                <div className="p-2 bg-indigo-500/20 rounded-xl">
+                  <Brain className="size-5 text-indigo-400" />
+                </div>
+                <h3 className="text-lg font-bold text-white">AI Topic Summary Report</h3>
+              </div>
+              {loadingSummary ? (
+                <div className="flex items-center gap-3 text-indigo-300 animate-pulse relative z-10">
+                  <Loader2 className="size-4 animate-spin" />
+                  <p className="text-sm">Analyzing class performance & generating insights...</p>
+                </div>
+              ) : (
+                <div className="relative z-10 prose prose-invert max-w-none">
+                  <ReactMarkdown
+                    components={{
+                      h2: ({ children }) => (
+                        <h2 className="text-base font-bold text-white mt-5 mb-2 first:mt-0 flex items-center gap-2">
+                          {children}
+                        </h2>
+                      ),
+                      h3: ({ children }) => (
+                        <h3 className="text-sm font-semibold text-indigo-200 mt-3 mb-1">{children}</h3>
+                      ),
+                      p: ({ children }) => (
+                        <p className="text-indigo-100/90 text-sm leading-relaxed mb-2">{children}</p>
+                      ),
+                      ul: ({ children }) => (
+                        <ul className="space-y-1.5 mb-3">{children}</ul>
+                      ),
+                      ol: ({ children }) => (
+                        <ol className="space-y-1.5 mb-3 counter-reset-none list-none">{children}</ol>
+                      ),
+                      li: ({ children }) => (
+                        <li className="flex gap-2 text-sm text-indigo-100/85 leading-relaxed before:content-['▸'] before:text-indigo-400 before:shrink-0 before:mt-0.5">
+                          <span>{children}</span>
+                        </li>
+                      ),
+                      strong: ({ children }) => (
+                        <strong className="text-white font-semibold">{children}</strong>
+                      ),
+                      hr: () => <hr className="border-indigo-500/20 my-4" />,
+                    }}
+                  >
+                    {aiSummary || ''}
+                  </ReactMarkdown>
+                </div>
+              )}
+            </div>
+
             {/* ── Section 1: Overview cards ── */}
             <div className="mb-10">
               <h1 className="text-2xl font-bold text-white mb-1">Class Analytics</h1>
@@ -382,20 +378,102 @@ export default function AnalyticsPage() {
               </ResponsiveContainer>
             </div>
 
-            {/* ── Section 4: Per-student cards ── */}
+            {/* ── Section 4: Overall Class Summary ── */}
             <div>
               <div className="flex items-center gap-2 mb-5">
-                <Users className="size-4 text-blue-400" />
-                <h2 className="text-white font-semibold">Individual Student Analysis</h2>
-                <span className="ml-auto flex items-center gap-1 text-xs text-[#8a8a8f]">
-                  <AlertTriangle className="size-3 text-red-400" /> weakest first
-                </span>
+                <Brain className="size-4 text-purple-400" />
+                <h2 className="text-white font-semibold">Overall Class Summary</h2>
+                <span className="ml-auto text-xs text-[#8a8a8f]">{data!.students.length} students tracked</span>
               </div>
-              {data!.students.length === 0 ? (
-                <p className="text-[#5a5a5f] text-sm text-center py-10">No students have contributed data yet.</p>
-              ) : (
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                  {data!.students.map((s) => <StudentCard key={s.email} student={s} />)}
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+                {/* Key Topics to Revise */}
+                <div className="bg-[#111115] border border-white/[0.06] rounded-2xl p-6">
+                  <div className="flex items-center gap-2 mb-4">
+                    <AlertTriangle className="size-4 text-red-400" />
+                    <h3 className="text-white font-semibold text-sm">Priority Topics to Revise</h3>
+                  </div>
+                  {data!.topWeakConcepts.length === 0 ? (
+                    <p className="text-[#5a5a5f] text-sm">No weak areas detected yet.</p>
+                  ) : (
+                    <div className="flex flex-wrap gap-2">
+                      {data!.topWeakConcepts.map(({ concept, count }, i) => (
+                        <span key={concept}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-medium border transition-all"
+                          style={{
+                            backgroundColor: `hsla(${10 + i * 15}, 80%, 60%, 0.1)`,
+                            borderColor: `hsla(${10 + i * 15}, 80%, 60%, 0.25)`,
+                            color: `hsl(${10 + i * 15}, 80%, 72%)`,
+                          }}>
+                          <span className="size-1.5 rounded-full shrink-0" style={{ backgroundColor: `hsl(${10 + i * 15}, 80%, 60%)` }} />
+                          {concept}
+                          <span className="text-xs opacity-60 ml-0.5">×{count}</span>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Topic Coverage */}
+                <div className="bg-[#111115] border border-white/[0.06] rounded-2xl p-6">
+                  <div className="flex items-center gap-2 mb-4">
+                    <BookOpen className="size-4 text-blue-400" />
+                    <h3 className="text-white font-semibold text-sm">Topics Covered by Students</h3>
+                  </div>
+                  {data!.topicBreakdown.length === 0 ? (
+                    <p className="text-[#5a5a5f] text-sm">No topics recorded yet.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {data!.topicBreakdown.slice(0, 5).map(({ topic, count, avgScore }) => (
+                        <div key={topic} className="flex items-center gap-3">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between mb-1">
+                              <p className="text-white text-xs font-medium truncate">{topic}</p>
+                              <span className="text-xs shrink-0 ml-2" style={{ color: avgScore >= 70 ? '#4ade80' : avgScore >= 45 ? '#fb923c' : '#f87171' }}>{avgScore}%</span>
+                            </div>
+                            <div className="h-1.5 bg-white/5 rounded-full overflow-hidden">
+                              <div className="h-full rounded-full transition-all duration-700"
+                                style={{ width: `${avgScore}%`, backgroundColor: avgScore >= 70 ? '#4ade80' : avgScore >= 45 ? '#fb923c' : '#f87171' }} />
+                            </div>
+                          </div>
+                          <span className="text-xs text-[#8a8a8f] shrink-0">{count} activities</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Student Roster Summary Table */}
+              {data!.students.length > 0 && (
+                <div className="bg-[#111115] border border-white/[0.06] rounded-2xl overflow-hidden">
+                  <div className="px-6 py-4 border-b border-white/[0.06] flex items-center gap-2">
+                    <Users className="size-4 text-blue-400" />
+                    <h3 className="text-white font-semibold text-sm">Student Overview</h3>
+                    <span className="ml-auto text-xs text-[#5a5a5f]">sorted by confidence</span>
+                  </div>
+                  <div className="divide-y divide-white/[0.04]">
+                    {data!.students.map((s) => (
+                      <div key={s.email} className="flex items-center gap-4 px-6 py-3 hover:bg-white/[0.02] transition-all">
+                        <div className="size-8 rounded-full bg-gradient-to-tr from-indigo-600/30 to-purple-600/30 border border-white/[0.06] flex items-center justify-center shrink-0">
+                          <span className="text-xs text-white font-bold">{s.name.charAt(0).toUpperCase()}</span>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-white text-sm font-medium truncate">{s.name}</p>
+                          <p className="text-[#5a5a5f] text-xs truncate">{s.email}</p>
+                        </div>
+                        <div className="flex items-center gap-4 text-xs text-[#8a8a8f] shrink-0">
+                          <span>{s.questionCount} Qs</span>
+                          <span>{s.submissionCount} subs</span>
+                          <span className="px-2 py-0.5 rounded-full text-xs font-semibold"
+                            style={{ color: s.avgConfidence >= 70 ? '#4ade80' : s.avgConfidence >= 45 ? '#fb923c' : '#f87171',
+                                     backgroundColor: s.avgConfidence >= 70 ? 'rgba(74,222,128,0.1)' : s.avgConfidence >= 45 ? 'rgba(251,146,60,0.1)' : 'rgba(248,113,113,0.1)' }}>
+                            {s.avgConfidence}%
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>

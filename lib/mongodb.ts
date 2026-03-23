@@ -18,6 +18,14 @@ if (!cached) {
 }
 
 async function connectToDatabase() {
+  // Disconnect if we are currently connected to the old default 'test' database
+  if (mongoose.connection.readyState === 1 && mongoose.connection.db?.databaseName !== 'newtarn') {
+    console.log(`Disconnecting stale connection from DB: ${mongoose.connection.db?.databaseName}`);
+    await mongoose.disconnect();
+    cached.conn = null;
+    cached.promise = null;
+  }
+
   if (cached.conn) {
     return cached.conn;
   }
@@ -29,7 +37,7 @@ async function connectToDatabase() {
     };
 
     cached.promise = mongoose.connect(MONGODB_URI, opts).then((mongoose) => {
-      console.log("Successfully connected to MongoDB.");
+      console.log(`Successfully connected to MongoDB. Database name: ${mongoose.connection.db?.databaseName}`);
       return mongoose;
     });
   }
