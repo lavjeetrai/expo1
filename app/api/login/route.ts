@@ -12,10 +12,14 @@ export async function POST(req: Request) {
 
     await connectToDatabase();
 
-    // The '+password' ensures the password field is returned even though it's set to select: false in schema
     const user = await User.findOne({ email }).select('+password');
     
+    console.log("=== LOGIN DEBUG ===");
+    console.log("Attempting login for email:", `"${email}"`);
+    console.log("Password provided:", `"${password}"`);
+    
     if (!user) {
+      console.log("Login failed: User not found in DB.");
       // Auto-provision test accounts if they don't exist yet
       if (email === 'lavjeet@gmail.com' && password === '123456') {
         const newUser = await User.create({ email, password, role: 'student', name: 'Lavjeet' });
@@ -33,10 +37,14 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Invalid email or password' }, { status: 401 });
     }
 
+    console.log("User found in DB. DB Password:", `"${user.password}"`);
+
     if (user.password !== password) {
+      console.log("Login failed: Password mismatch.");
       return NextResponse.json({ error: 'Invalid email or password' }, { status: 401 });
     }
 
+    console.log("Login successful! Password matched.");
     // Don't send the password back to the client
     const userObj = user.toObject();
     delete userObj.password;

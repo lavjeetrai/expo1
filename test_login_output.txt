@@ -1,0 +1,4 @@
+Exact Login Status: 200
+Exact Login Response: {"message":"Login successful","user":{"_id":"69c2a1a2857d056d0a604010","email":"test_user_123@example.com","role":"student","name":"Test User","registrationNumber":"AP25123456789","course":"CSE CORE","section":"A","createdAt":"2026-03-24T14:37:22.761Z","__v":0}}
+Uppercase Login Status: 401
+Uppercase Login Response: {"error":"Invalid email or password"}
