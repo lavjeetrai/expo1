@@ -1,6 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import path from 'path';
-import { writeFile, mkdir } from 'fs/promises';
 
 export async function POST(req: NextRequest) {
   try {
@@ -11,24 +9,21 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'No file provided' }, { status: 400 });
     }
 
+    // 1. Read the file into an ArrayBuffer
     const bytes = await file.arrayBuffer();
+    
+    // 2. Convert the buffer to a Base64 string
     const buffer = Buffer.from(bytes);
+    const base64String = buffer.toString('base64');
+    
+    // 3. Create a Data URI (this acts as the "path" for MongoDB)
+    // Example: data:application/pdf;base64,JVBERi0xLjQK...
+    const fileDataUri = `data:${file.type};base64,${base64String}`;
 
-    // Create uploads directory if it doesn't exist
-    const uploadDir = path.join(process.cwd(), 'public', 'uploads');
-    await mkdir(uploadDir, { recursive: true });
-
-    // Create a unique filename
-    const timestamp = Date.now();
-    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
-    const fileName = `${timestamp}_${safeName}`;
-    const filePath = path.join(uploadDir, fileName);
-
-    await writeFile(filePath, buffer);
-
+    // Return the strings needed for your Assignment Schema
     return NextResponse.json({
       fileName: file.name,
-      filePath: `/uploads/${fileName}`,
+      filePath: fileDataUri, 
     });
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : 'Upload failed';
