@@ -306,11 +306,12 @@ function SignupPage() {
       const result = await signInWithPopup(auth, googleProvider);
       
       // Sync Google User with MongoDB to preserve defined Role
+      const email = result.user.email || "";
       const res = await fetch('/api/signup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          email: result.user.email,
+          email: email,
           name: result.user.displayName,
           firebaseUid: result.user.uid,
           role: role
@@ -322,14 +323,17 @@ function SignupPage() {
          console.warn("MongoDB sync issue:", dbResult.error);
       }
 
-      console.log("Logged in user:", result.user, "Selected Role:", role);
+      const actualRole = dbResult.user?.role || role;
+      console.log("Logged in user:", result.user, "Selected Role:", actualRole);
+      
       if (typeof window !== "undefined") {
-        localStorage.setItem("userRole", role);
+        localStorage.setItem("userRole", actualRole);
+        localStorage.setItem("userEmail", email);
       }
       setShowLoader(true);
       
       setTimeout(() => {
-        if (role === "professor") {
+        if (actualRole === "professor") {
           router.push("/dashboard");
         } else {
           router.push("/classroom");

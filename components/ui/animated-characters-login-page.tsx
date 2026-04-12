@@ -299,10 +299,34 @@ function LoginPage() {
   const handleGoogleSignIn = async () => {
     try {
       const result = await signInWithPopup(auth, googleProvider);
-      console.log("Logged in user:", result.user);
+      console.log("Logged in user via Google:", result.user);
+
+      const email = result.user.email || "";
+      
+      // Fetch user role from database
+      const res = await fetch(`/api/user?email=${encodeURIComponent(email)}`);
+      if (!res.ok) {
+         // If they don't exist, they should ideally be redirected to signup
+         alert("No account found! Please sign up first.");
+         auth.signOut();
+         return;
+      }
+      
+      const userData = await res.json();
+      const actualRole = userData.role || "student";
+
+      if (typeof window !== "undefined") {
+        localStorage.setItem("userRole", actualRole);
+        localStorage.setItem("userEmail", email);
+      }
+      
       setShowLoader(true);
       setTimeout(() => {
-        router.push("/");
+        if (actualRole === "professor") {
+          router.push("/dashboard");
+        } else {
+          router.push("/classroom");
+        }
       }, 2500);
     } catch (error: any) {
       console.error("Login failed:", error);

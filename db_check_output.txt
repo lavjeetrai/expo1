@@ -1,6 +1,0 @@
-User found!
-Exact email in DB: "test_user_123@example.com"
-Exact email length: 25
-Exact password in DB: "mySecretPassword123"
-Exact password length: 19
-Comparison with 'mySecretPassword123': true

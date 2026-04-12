@@ -10,7 +10,7 @@ export function HeroScrollDemo() {
         titleComponent={
           <>
             <h1 className="text-4xl md:text-6xl font-bold text-black dark:text-white uppercase tracking-tighter leading-tight mb-4">
-              Learn X <br />
+              LEARNING WITH LAVJEET <br />
               <span className="text-sm md:text-xl font-medium mt-0 block tracking-[0.3em] opacity-80 mb-4">
                 TECHNOLOGY FOR LEARNING
               </span>
